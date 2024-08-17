@@ -1,0 +1,71 @@
+library(tidyverse)
+library(stringr)
+library(ggplot2)
+library(baseballr)
+library(sjPlot)
+library(vip)
+
+# loading in the two CSV for usage, data from Fangraphs for fielding statistics (2022-2024, filter on 1B data)
+sheet_1 <- read.csv("C:/Users/Drew Duffy/Downloads/MLB Def for Phillies (as of 8_15_24) - picks.csv")
+sheet_2 <- read.csv("C:/Users/Drew Duffy/Downloads/MLB Def for Phillies (as of 8_15_24) - split.csv")
+
+#joining the sheets on season and names
+clean <- left_join(sheet_1, sheet_2, by = c("Season", "name_last", "name_first")) 
+
+#loading previous error data I have used
+load("first_base.RData")
+
+#renaming to season for a join
+clean <- clean %>% 
+  rename(game_year = "Season")
+
+#joining the two datasets 
+total <- left_join(clean, first_base, by = c("game_year", "name_last", "name_first"))
+
+#picking the columns I want to look at
+total <- total %>% 
+  select(game_year, name_last, name_first, G, wpa, age, OAA, DRS, FRV, 
+         Scp, FE, TE, PO, A, avg_xwoba, sum_run_exp)
+
+# assigning weights to each commonly used metric. WPA gets a x2 due to it's small values
+def_rat_weights <- data.frame(
+  weight_OAA = c(".4"),
+  weight_DRS = c(".4"), 
+  weight_wpa = c("2"))
+
+#changing all from string to numeric  
+def_rat_weights <- def_rat_weights %>% 
+  mutate(weight_OAA = as.numeric(weight_OAA), 
+         weight_DRS = as.numeric(weight_DRS), 
+         weight_wpa = as.numeric(weight_wpa))
+
+#converting the values into new columns with their weighted value
+weight_OAA <- def_rat_weights$weight_OAA
+weight_DRS <- def_rat_weights$weight_DRS
+weight_wpa <- def_rat_weights$weight_wpa
+
+total$weighted_OAA <- total$OAA * weight_OAA
+total$weighted_DRS <- total$DRS * weight_DRS
+total$weighted_wpa <- total$wpa * weight_wpa
+
+# Duffy Defensive Rating
+ddr <- total %>%
+  mutate(duffy_d_rating = (weighted_OAA + weighted_OAA + sum_run_exp)) %>% 
+  filter(!is.na(duffy_d_rating))
+
+#finding the 3rd quartile to establish an above average threshold (that is well above 50%)
+summary(ddr$duffy_d_rating)
+            
+abv_avg <- quantile(ddr$duffy_d_rating, 0.75)
+
+# Add a binary classification based on the above average limit
+ddr <- ddr %>%
+  mutate(is_above_avg = ifelse(duffy_d_rating > abv_avg, 1, 0))
+
+#creating a linear model for above average first base defenders and seeing the trend for age
+ddr_model <- lm(is_above_avg ~ weighted_OAA + weighted_DRS + weighted_wpa + age, 
+                 data = ddr)
+
+summary(ddr_model)
+
+plot_model(ddr_model, type = "pred")
