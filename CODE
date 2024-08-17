@@ -27,11 +27,11 @@ total <- total %>%
   select(game_year, name_last, name_first, G, wpa, age, OAA, DRS, FRV, 
          Scp, FE, TE, PO, A, avg_xwoba, sum_run_exp)
 
-# assigning weights to each commonly used metric. WPA gets a x2 due to it's small values
+# assigning weights to each commonly used metric.
 def_rat_weights <- data.frame(
   weight_OAA = c(".4"),
   weight_DRS = c(".4"), 
-  weight_wpa = c("2"))
+  weight_wpa = c(".2"))
 
 #changing all from string to numeric  
 def_rat_weights <- def_rat_weights %>% 
